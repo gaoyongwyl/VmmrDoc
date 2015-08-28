@@ -1,0 +1,155 @@
+
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
+
+\documentclass{article}
+\usepackage{CJKutf8}
+\usepackage{color}
+
+\begin{document}
+\begin{CJK}{UTF8}{gbsn}
+
+
+\title{Vmmr 系统研发文档}
+\author{Yong Gao\\
+       Yuhang District, Hangzhou\\
+       \emph{gaoyongwyl@163.com}}
+\date{2015/04/14}
+\maketitle
+
+
+\begin{abstract}
+ 对实验系统进行记录。包括实验框架、实验流程和注意事项等内容。
+\end{abstract}
+
+
+\section{System work flow}
+\label{sec:introduction}
+The main steps to training and test vmmr dnn model are listed as the following:
+ 
+\begin{enumerate}
+  \item \textbf{解压数据。多个压缩包的话直接向同一目录解压，免去之后的数据拷贝}。
+  \item \textbf{生成训练和验证集的list，及验证集的GroundTruth(\color{red}{TODO item})}。调用python脚本CreateLabelTrainTest.py。该脚本的使用说明如下：\\
+     \begin{quotation}
+      Create make and makemodel label dict, and all , train and test label list\\
+     \textbf{ Positional arguments}:
+      \begin{itemize}
+        \item SampleFolder: DataSet's data foler, Sample top folder.\\
+                          e.g.: ～/Projects/Vmmr/Data/V1\_AAuMColor/V1\_AAuMColor \\
+      \end{itemize}         
+      \textbf{optional arguments}: \\
+      \begin{itemize}
+        \item  -h, --help:       show this help message and exit \\
+        \item  -r TrainTestRatio, -TrainTestRatio: (Default=24) TrainTestRatio. Ratio between the num of train and test \\
+        \item  -sh IsRandShuffle, -RandomShuffle IsRandShuffle:(Default=1,yes) Whether shuffle list randomly. Must be true 
+                                for multi-round exp or test. 0 denote not\\
+        \item  -tgn TrainTestGroupNum, -TrainTestGroupNum TrainTestGroupNum: (Default=1)Train and test label list group number \\ 
+      \end{itemize}
+      \textbf{Example}: \\
+      \textit{\color{blue}{CreateLabelTrainTest.py $\sim$/Projects/Vmmr/Data/V1\_AAuMColor/V1\_AAuMColor}}
+     \end{quotation}
+       
+  \item \textbf{生成测试集的list}。调用CreateTestList.py，生成测试集的list。所有测试集在，数据集目录的Test文件夹下。生成的list文件放在Test文件夹下的\_List目录中。
+               GroundTruth文件也会自动生成。
+        CreateTestList.py脚本的使用说明如下：\\
+    \begin{quotation}
+       Create relpath file name list \\
+       \textbf{positional arguments}:\\
+       \begin{itemize}
+       \item SampleFolder:  Sample top folder, in next level is make model folder. E.g.: \textit{ $\sim$/Projects/VehicleRecog/Data/V1\_AAuMColor/Test }
+       \end{itemize}
+       \textbf{optional arguments}:
+       \begin{itemize}
+       \item -h, --help：    show this help message and exit
+       \end{itemize}    
+       \textbf{Example}:\\
+       \textit{\color{blue}{CreateTestList.py $\sim$/Projects/VehicleRecog/Data/V1\_AAuMColor/Test}}
+       
+     \end{quotation}
+     
+   \item \textbf{生成训练数据LevelDB}。调用convert\_imagesetex.bin / exe，产生一个或多个区域的杨本数据LevelDB。
+       convert\_imagesetex应用程序使用说明如下：\\
+       \begin{quotation}
+         Convert a set of images to the leveldb format used as input for Caffe. Usage:\\
+         \textit{\color{blue}{convert\_imagesetex DataSetNameVer(eg. V0, PreprocTypeIDs(sep by":") PatchIDs(sep by ":") NewWidth AugmentNum(<AugTrain:AugTest>) FuncCode(TestOrTrain, 0:testonly,1:tainonly,2: both) IsNewLdb} }\\
+        \textbf{positional arguments}:\\
+        \begin{itemize}
+          \item DataSetNameVer:(eg. V0) data set name;
+          \item PreprocTypeIDs:(sep by":") 0 is Color, 1 is gray, 2 is gray hist equal, 3 is color hist equal;
+          \item PatchIDs:(sep by ":") -1 is vface, 4 is LeftHLamp, ... 10 is MidLineBot.
+          \item NewWidth:Normalized vehicle face  witdh before cropping;
+          \item AugmentNum: (<AugTrain:AugTest> increase how many samples by transformation, such as adding noise, change color. 0 means not to augment.
+          \item FuncCode:  TestOrTrain(0:testonly,1:tainonly,2: both) 
+          \item IsNewLdb: 1 denote creating new db. 0 denote append data to an existing db.
+        \end{itemize}
+        \textbf{Example}:\\
+        \textit{\color{blue}{convert\_imagesetex.bin V1 0:1 -1:6 380 0:0 2 1}}
+       \end{quotation}
+
+    \item \textbf{计算样本的均值}。这里使用训练样本的leveldb作为caffe工具compute\_image\_mean的输入。为方便调用，DNNMakemodel\_PrepareData.py对该工具进行了封装，
+                 其用法如下：\\
+         \textit{usage: DNNMakemodel\_PrepareData.py [-h] [-ttlid TrainTestListID] DATASET\_NAME PATCH\_ID NewWidth}
+         \textbf{Example}:\\
+         \textit{\color{blue}{./DNNMakemodel\_PrepareData.py V1\_AAuMColor 6 150}}
+
+     \item \textbf{\color{red}{数据准备检查}}\\
+               \begin{itemize}
+               \item 在生成list，类别label等文件同时，CreateLabelTrainTest.py还会调用\\GenVMMTruthFromFileName.py生成所有文件的GroundTruth信息文件。
+                     注意检查该文件 是否已生成，否则测试时会因找不到该文件而报错，中止运行。\\
+               \item 一定要检查生成的make-label和makemodel-label的字典中，make及makemodel是否按顺序排列，否则可能会影响性能。
+               \item 检查convert\_imageset 是否转换了预期数目的文件到LevelDB数据库中。可以通过LdbImgViewer.bin或者查看转换的Log文件。
+               \end{itemize}
+      
+    \item \textbf{训练或者fine tune 网络}。老版本的train\_net和finetune\_net现在被统一的caffe命令集替代。\\
+       \textit{ caffe train --solver=... [--snapshot=...]}\\
+       \textit{ caffe train --solver=... [--weights=...]}\\
+       新的caffe命令集说明如下：\\
+       caffe.bin: command line brew \\
+       usage: \textit{ caffe <command> <args>} \\
+       \\
+       \textbf{Commands}:\\
+       \begin{itemize}
+        \item train:  train or finetune a model
+        \item test:   score a model
+        \item device\_query: show GPU diagnostic information
+        \item time:  benchmark model execution time        
+       \end{itemize}
+       \textbf{ Flags from tools/caffe.cpp}:
+       \begin{itemize}
+        \item -gpu (Run in GPU mode on given device ID.) type: int32 default: -1
+        \item -iterations (The number of iterations to run.) type: int32 default: 50
+        \item -model (The model definition protocol buffer text file..) type: string default: ""
+        \item -snapshot (Optional; the snapshot solver state to resume training.) type: string default: ""
+        \item -solver (The solver definition protocol buffer text file.) type: string default: ""
+        \item  -weights (Optional; the pretrained weights to initialize finetuning. Cannot be set simultaneously with snapshot.) type: string default: ""
+        \end{itemize}
+        
+     \item \textbf{在标准测试集上进行测试}
+
+     \item \textbf{根据每个车型的样本数目生成数据子集} 将原始的数据集按每个车型的样本数条件，生成子集。比如：生成每个车型样本数大于等于8的子集；生成每个车型样本数小于8的子数据集。\\
+       通过调用$ShowClassNumHist.py$和$ExtractSubDataSet.py$两个脚本来完成。主要分三个步骤：\\
+       \begin{itemize}
+       \item 调用$ShowClassNumHist.py$生成类别-数量列表文件，该文件中安样本数量排序。
+       \item 手工拷贝或删除，生成符合样本数量条件的类别-数量列表文件。
+       \item 调用$ExtractSubDataSet.py$，以上一部生成的类别-数量文件作为参数之一，建立符合样本数量条件的新数据集。
+       \end{itemize}
+       
+
+\end{enumerate}
+
+可能导致错误的一些常见情况：
+\begin{itemize}
+\item 类别数目出错。比如：网络模型中的类别和实际类别不一致
+\item 数据转换不对或不完全。只有一部分数据转换进了LevelDB，即只有一部分数据参与训练，效果肯定不好！
+
+\end{itemize}
+
+
+\end{CJK}
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
