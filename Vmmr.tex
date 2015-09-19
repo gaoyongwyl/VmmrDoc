@@ -139,10 +139,12 @@ The main steps to training and test vmmr dnn model are listed as the following:
 
 \end{enumerate}
 
-可能导致错误的一些常见情况：
+\section{Mistakes Usually Made}
 \begin{itemize}
 \item 类别数目出错。比如：网络模型中的类别和实际类别不一致
 \item 数据转换不对或不完全。只有一部分数据转换进了LevelDB，即只有一部分数据参与训练，效果肯定不好！
+\item val-proto网络模型文件中的batch\_size决定实际的内存分配和运算，影响速度。在应用层一次送进一张识别的时候，应该设为$1$。否则，有无用的计算产生！
+\item 
 
 \end{itemize}
 
